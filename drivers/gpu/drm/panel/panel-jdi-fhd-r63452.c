@@ -10,6 +10,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/regulator/consumer.h>
 
 #include <video/mipi_display.h>
 
@@ -21,6 +22,7 @@ struct jdi_fhd_r63452 {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
 	struct gpio_desc *reset_gpio;
+	struct regulator_bulk_data supplies[3];
 	bool prepared;
 };
 
@@ -166,12 +168,23 @@ static int jdi_fhd_r63452_prepare(struct drm_panel *panel)
 	if (ctx->prepared)
 		return 0;
 
+	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
+	if (ret < 0) {
+		dev_err(dev, "Failed to enable panel supplies: %d\n", ret);
+		return ret;
+	}
+
+	/* VDDIO needs 1 ms before reset; IBB needs up to 10 ms. */
+	usleep_range(1000, 1100);
+	msleep(10);
+
 	jdi_fhd_r63452_reset(ctx);
 
 	ret = jdi_fhd_r63452_on(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize panel: %d\n", ret);
 		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+		regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 		return ret;
 	}
 
@@ -193,6 +206,10 @@ static int jdi_fhd_r63452_unprepare(struct drm_panel *panel)
 		dev_err(dev, "Failed to un-initialize panel: %d\n", ret);
 
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+
+	/* Match the 4.19 vendor supply timing before removing VDDIO/VSP/VSN. */
+	msleep(10);
+	regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 
 	ctx->prepared = false;
 	return 0;
@@ -252,6 +269,14 @@ static int jdi_fhd_r63452_probe(struct mipi_dsi_device *dsi)
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "Failed to get reset-gpios\n");
 
+	ctx->supplies[0].supply = "wqhd-vddio";
+	ctx->supplies[1].supply = "lab";
+	ctx->supplies[2].supply = "ibb";
+	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ctx->supplies),
+				      ctx->supplies);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get panel supplies\n");
+
 	ctx->dsi = dsi;
 	mipi_dsi_set_drvdata(dsi, ctx);
 
@@ -295,6 +320,9 @@ static void jdi_fhd_r63452_remove(struct mipi_dsi_device *dsi)
 		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
 
 	drm_panel_remove(&ctx->panel);
+
+	if (ctx->prepared)
+		regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 }
 
 static const struct of_device_id jdi_fhd_r63452_of_match[] = {

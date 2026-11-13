@@ -761,6 +761,16 @@
 		reset-gpios = <&tlmm 94 GPIO_ACTIVE_LOW>;
 		backlight = <&pmi8998_wled>;
 
+		/*
+		 * The 4.19 vendor DT describes these as "wqhd-vddio", "lab"
+		 * and "ibb" panel supplies.  VDDIO is PM8998 L14 (1.8 V);
+		 * LAB/IBB provide VSP/VSN.  The panel driver must enable them
+		 * before releasing reset.
+		 */
+		wqhd-vddio-supply = <&vreg_l14a_1p8>;
+		lab-supply = <&lab>;
+		ibb-supply = <&ibb>;
+
 		port {
 			panel_in: endpoint {
 				remote-endpoint = <&mdss_dsi0_out>;
@@ -780,20 +790,30 @@
 
 &pmi8998_wled {
 	status = "okay";
-	qcom,enabled-strings = <0 1 2 3>;
+
+	/*
+	 * Only WLED_SINK1 and WLED_SINK2 are wired to the Mi 6 panel
+	 * connector.  SINK3/SINK4 are unconnected; enabling them makes the
+	 * WLED boost converter hit OVP and turn the backlight off.  The 4.19
+	 * vendor DTB expresses the same setting as qcom,string-cfg = <0x03>.
+	 */
+	qcom,enabled-strings = <0 1>;
 	qcom,switching-freq = <800>;
 };
 
+/*
+ * LAB/IBB are VSP/VSN panel rails.  Keep them consumer-controlled so the
+ * panel driver can sequence them with the DSI reset; the 4.19 vendor DT does
+ * not mark them always-on.
+ */
 &lab {
 	regulator-min-microvolt = <4600000>;
 	regulator-max-microvolt = <6000000>;
-	regulator-always-on;
 };
 
 &ibb {
 	regulator-min-microvolt = <4600000>;
 	regulator-max-microvolt = <6000000>;
-	regulator-always-on;
 };
 
 /*
