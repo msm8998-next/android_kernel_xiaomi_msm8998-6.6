@@ -951,6 +951,7 @@ void dpu_crtc_commit_kickoff(struct drm_crtc *crtc)
 	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
 	struct dpu_kms *dpu_kms = _dpu_crtc_get_kms(crtc);
 	struct dpu_crtc_state *cstate = to_dpu_crtc_state(crtc->state);
+	unsigned long flags;
 
 	/*
 	 * If no mixers has been allocated in dpu_crtc_atomic_check(),
@@ -990,6 +991,13 @@ void dpu_crtc_commit_kickoff(struct drm_crtc *crtc)
 	drm_for_each_encoder_mask(encoder, crtc->dev, crtc->state->encoder_mask)
 		dpu_encoder_kickoff(encoder);
 
+	spin_lock_irqsave(&crtc->dev->event_lock, flags);
+	if (dpu_crtc->event) {
+		drm_crtc_arm_vblank_event(crtc, dpu_crtc->event);
+		dpu_crtc->event = NULL;
+	}
+	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
+
 	reinit_completion(&dpu_crtc->frame_done_comp);
 
 end:
@@ -1015,7 +1023,12 @@ static void dpu_crtc_reset(struct drm_crtc *crtc)
  */
 static struct drm_crtc_state *dpu_crtc_duplicate_state(struct drm_crtc *crtc)
 {
-	struct dpu_crtc_state *cstate, *old_cstate = to_dpu_crtc_state(crtc->state);
+	struct dpu_crtc_state *cstate, *old_cstate;
+
+	if (!crtc->state)
+		return NULL;
+
+	old_cstate = to_dpu_crtc_state(crtc->state);
 
 	cstate = kmemdup(old_cstate, sizeof(*old_cstate), GFP_KERNEL);
 	if (!cstate) {

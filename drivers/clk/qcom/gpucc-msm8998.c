@@ -130,7 +130,13 @@ static struct clk_rcg2 rbcpr_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gfx3d_clk_src[] = {
-	{ .src = P_GPUPLL0_OUT_EVEN, .pre_div = 3 },
+	F(257000000, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
+	F(342000000, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
+	F(414000000, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
+	F(515000097, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
+	F(596000097, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
+	F(670000097, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
+	F(710000097, P_GPUPLL0_OUT_EVEN, 1, 0, 0),
 	{ }
 };
 

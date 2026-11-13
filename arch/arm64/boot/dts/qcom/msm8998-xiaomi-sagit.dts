@@ -36,6 +36,7 @@
 	compatible = "xiaomi,sagit", "qcom,msm8998";
 	chassis-type = "handset";
 	/* Required for bootloader to select correct board */
+	qcom,msm-id = <0x124 0x0>, <0x124 0x20000>, <0x124 0x20001>;
 	qcom,board-id = <30 0>;
 
 	reserved-memory {
@@ -172,6 +173,7 @@
 		gpio = <&tlmm 50 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
+		regulator-always-on;
 	};
 };
 
@@ -418,6 +420,7 @@
 		vreg_l14a_1p8: l14 {
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
+			regulator-always-on;
 		};
 
 		vreg_l15a_1p8: l15 {
@@ -799,6 +802,9 @@
 	 */
 	qcom,enabled-strings = <0 1>;
 	qcom,switching-freq = <800>;
+	qcom,ovp-millivolt = <29600>;
+	qcom,current-boost-limit = <970>;
+	qcom,current-limit-microamp = <20000>;
 };
 
 /*
@@ -842,6 +848,25 @@
 	};
 
 	chosen {
-		stdout-path = "serial0:115200n8";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		framebuffer0: framebuffer@9d400000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0x9d400000 0x0 0x2400000>;
+			width = <1080>;
+			height = <1920>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+		};
 	};
+};
+
+&adreno_gpu {
+	status = "disabled";
+};
+
+&adreno_smmu {
+	status = "disabled";
 };
