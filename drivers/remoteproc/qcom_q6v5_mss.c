@@ -135,11 +135,7 @@
 #define BOOT_FSM_TIMEOUT                10000
 #define BHS_CHECK_MAX_LOOPS             200
 
-struct reg_info {
-	struct regulator *reg;
-	int uV;
-	int uA;
-};
+/* struct reg_info is shared with the PAS driver via qcom_common.h. */
 
 struct qcom_mss_reg_res {
 	const char *supply;

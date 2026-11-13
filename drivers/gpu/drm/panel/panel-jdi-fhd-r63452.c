@@ -97,6 +97,12 @@ static int jdi_fhd_r63452_on(struct jdi_fhd_r63452 *ctx)
 	mipi_dsi_dcs_write_seq(dsi, MIPI_DCS_SET_CABC_MIN_BRIGHTNESS, 0x00);
 	mipi_dsi_dcs_write_seq(dsi, 0x84, 0x00);
 
+	/*
+	 * The downstream sagit 4.19 sequence sends DCS display-on with a
+	 * 20 ms delay, then exits sleep mode with an 80 ms delay, then writes
+	 * the vendor 0x84/0xc8 registers and returns to page 3.  Keep that
+	 * order; the generated driver already matches it.
+	 */
 	ret = mipi_dsi_dcs_set_display_on(dsi);
 	if (ret < 0) {
 		dev_err(dev, "Failed to set display on: %d\n", ret);
@@ -251,8 +257,15 @@ static int jdi_fhd_r63452_probe(struct mipi_dsi_device *dsi)
 
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_BURST |
-			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
+	/*
+	 * The Mi 6 JDI panel is a command-mode panel ("dsi_cmd_mode" in the
+	 * downstream DT), not a video-mode panel.  The init sequence below is
+	 * the downstream command-mode sequence, so advertising VIDEO_BURST here
+	 * makes the DSI host drive the panel in the wrong mode.  The MSM DSI
+	 * host appends TX EOT by default, matching the downstream
+	 * qcom,mdss-dsi-tx-eot-append property; only NO_EOT would disable it.
+	 */
+	dsi->mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
 	drm_panel_init(&ctx->panel, dev, &jdi_fhd_r63452_panel_funcs,
 		       DRM_MODE_CONNECTOR_DSI);

@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/completion.h>
+#include <linux/interconnect.h>
 #include <linux/soc/qcom/qcom_aoss.h>
 
 struct icc_path;

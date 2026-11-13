@@ -1,0 +1,26 @@
+################################################################################
+## Xiaomi Mi 6 (sagit) / msm8998 non-GKI build configuration
+##
+## This is a first cut for the Android build system.  It uses the generated
+## vendor/sagit_defconfig, which is produced from the direct-build config
+## (arch/arm64/configs/defconfig + vendor/sagit.config).
+################################################################################
+
+. "${ROOT_DIR}/${KERNEL_DIR}/build.config.common"
+. "${ROOT_DIR}/${KERNEL_DIR}/build.config.aarch64"
+
+MSM_ARCH=sagit
+VARIANTS=(perf_defconfig)
+[ -z "${VARIANT}" ] && VARIANT=perf_defconfig
+
+BUILD_BOOT_IMG=1
+BOOT_IMAGE_HEADER_VERSION=0
+BASE_ADDRESS=0x00000000
+PAGE_SIZE=4096
+
+MAKE_GOALS="Image"
+KERNEL_CMDLINE="console=ttyMSM0,115200n8 earlycon androidboot.console=ttyMSM0 androidboot.hardware=qcom androidboot.boot_devices=soc/1da4000.ufshc msm_rtb.filter=0x37 ehci-hcd.park=3 service_locator.enable=1 swiotlb=2048 loop.max_part=7"
+
+. "${KERNEL_DIR}/build.config.msm.common"
+
+DEFCONFIG="vendor/sagit_defconfig"

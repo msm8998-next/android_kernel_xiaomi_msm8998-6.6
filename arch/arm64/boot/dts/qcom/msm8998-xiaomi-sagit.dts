@@ -259,6 +259,8 @@
 };
 
 &blsp2_uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&blsp2_uart1_debug>;
 	status = "okay";
 };
 
@@ -670,6 +672,13 @@
 	vcc-max-microamp = <750000>;
 	vccq-max-microamp = <560000>;
 	vccq2-max-microamp = <750000>;
+	/*
+	 * The downstream sagit 4.19 DT configures the host link as one lane
+	 * per direction while the QMP PHY still has two lanes.  Keep the
+	 * board-specific link width instead of the msm8998.dtsi default of 2.
+	 */
+	lanes-per-direction = <1>;
+	/* Upstream UFS host driver + generic QMP UFS PHY. */
 	status = "okay";
 };
 
@@ -704,4 +713,115 @@
 	vdd-1.3-rfa-supply = <&vreg_l17a_1p3>;
 	vdd-3.3-ch0-supply = <&vreg_l25a_3p3>;
 	status = "okay";
+};
+
+/*
+ * Firmware paths for the blobs staged from firmware-mainline-xiaomi-mi6.
+ * Keep the remoteprocs disabled until the basic display/UFS boot has been
+ * validated; enabling them before their dependencies are ready can stall
+ * boot.  The MSS firmware-name order is MBA first, modem second.
+ */
+&remoteproc_adsp {
+	firmware-name = "qcom/msm8998/xiaomi/adsp.mbn";
+	status = "disabled";
+};
+
+&remoteproc_mss {
+	firmware-name = "qcom/msm8998/xiaomi/mba.mbn",
+			"qcom/msm8998/xiaomi/modem.mbn";
+	status = "disabled";
+};
+
+&remoteproc_slpi {
+	firmware-name = "qcom/msm8998/xiaomi/slpi_v2.mbn";
+	status = "disabled";
+};
+
+/*
+ * Display: the Xiaomi Mi 6 uses the same JDI R63452 command-mode panel as
+ * the Mi 5.  Mainline 6.6 already has a DRM panel driver for it.
+ */
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	status = "okay";
+
+	vdd-supply = <&vreg_l1a_0p875>;
+	vdda-supply = <&vreg_l2a_1p2>;
+
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&mdss_dsi_active_state &mdss_te_active_state>;
+	pinctrl-1 = <&mdss_dsi_suspend_state &mdss_te_suspend_state>;
+
+	panel@0 {
+		compatible = "jdi,fhd-r63452";
+		reg = <0>;
+		reset-gpios = <&tlmm 94 GPIO_ACTIVE_LOW>;
+		backlight = <&pmi8998_wled>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_phy {
+	status = "okay";
+	vdds-supply = <&vreg_l1a_0p875>;
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&panel_in>;
+};
+
+&pmi8998_wled {
+	status = "okay";
+	qcom,enabled-strings = <0 1 2 3>;
+	qcom,switching-freq = <800>;
+};
+
+&lab {
+	regulator-min-microvolt = <4600000>;
+	regulator-max-microvolt = <6000000>;
+	regulator-always-on;
+};
+
+&ibb {
+	regulator-min-microvolt = <4600000>;
+	regulator-max-microvolt = <6000000>;
+	regulator-always-on;
+};
+
+/*
+ * The Mi 6 debug UART is BLSP2 UART1 on GPIO4/5 (the same pins and function
+ * used by the 4.19 vendor DT).  Keep the alias at serial0 so the kernel
+ * console is ttyMSM0 regardless of probe order with the Bluetooth UART.
+ */
+&tlmm {
+	blsp2_uart1_debug: blsp2-uart1-debug {
+		mux {
+			pins = "gpio4", "gpio5";
+			function = "blsp_uart8_a";
+		};
+
+		config {
+			pins = "gpio4", "gpio5";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+};
+
+/ {
+	aliases {
+		serial0 = &blsp2_uart1;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
 };
