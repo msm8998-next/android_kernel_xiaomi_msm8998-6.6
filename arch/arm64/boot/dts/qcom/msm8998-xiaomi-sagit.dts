@@ -36,8 +36,34 @@
 	compatible = "xiaomi,sagit", "qcom,msm8998";
 	chassis-type = "handset";
 	/* Required for bootloader to select correct board */
-	qcom,msm-id = <0x124 0x0>, <0x124 0x20000>, <0x124 0x20001>;
 	qcom,board-id = <30 0>;
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * Keep using the framebuffer set up by the XBL bootloader so we get
+		 * a working (simplefb/simpledrm) console on screen before any real
+		 * MDSS/DSI panel driver is in place.
+		 */
+		framebuffer0: framebuffer@9d400000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0x9d400000 0x0 0x2400000>;
+			width = <1080>;
+			height = <1920>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+			/*
+			 * No clock/power-domain references here on purpose: the
+			 * bootloader already enabled the display pipeline and we
+			 * pass clk_ignore_unused/pd_ignore_unused, so the refs only
+			 * risk making simpledrm defer forever if the MMCC/GDSC is
+			 * not ready yet.
+			 */
+		};
+	};
 
 	reserved-memory {
 		/*
@@ -170,10 +196,20 @@
 	disp_vddts_vreg: disp-vddts-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "disp-vddts-regulator";
+		/* Panel + touch I/O rail, enabled by driving GPIO50 high. Keep it
+		 * on: the panel driver does not request it, and the touch driver
+		 * only probes much later (from the rootfs). */
 		gpio = <&tlmm 50 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
-		regulator-boot-on;
 		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	battery: battery {
+		compatible = "simple-battery";
+		voltage-min-design-microvolt = <4200000>;
+		voltage-max-design-microvolt = <4400000>;
+		charge-full-design-microamp = <3000000>;
 	};
 };
 
@@ -198,7 +234,7 @@
 		vio-supply = <&vreg_l6a_1p8>;
 
 		syna,reset-delay-ms = <20>;
-		syna,startup-delay-ms = <20>;
+		syna,startup-delay-ms = <200>;
 
 		rmi4-f01@1 {
 			reg = <0x01>;
@@ -217,11 +253,6 @@
 			reg = <0x1a>;
 		};
 	};
-};
-
-&blsp1_i2c5_sleep {
-	/delete-property/ bias-pull-up;
-	bias-disable;
 };
 
 &blsp1_uart3 {
@@ -261,8 +292,6 @@
 };
 
 &blsp2_uart1 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&blsp2_uart1_debug>;
 	status = "okay";
 };
 
@@ -417,6 +446,7 @@
 			regulator-max-microvolt = <2960000>;
 		};
 
+		/* Panel I/O rail (vddio). No driver requests it yet, keep it on. */
 		vreg_l14a_1p8: l14 {
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
@@ -548,14 +578,7 @@
 		bias-pull-down;
 	};
 
-	mdss_te_active_state: mdss-te-active-state {
-		pins = "gpio10";
-		function = "mdp_vsync_a";
-		drive-strength = <2>;
-		bias-pull-down;
-	};
-
-	mdss_te_suspend_state: mdss-te-suspend-state {
+	mdss_te_state: mdss-te-state {
 		pins = "gpio10";
 		function = "mdp_vsync_a";
 		drive-strength = <2>;
@@ -623,6 +646,9 @@
 		function = "gpio";
 		drive-strength = <16>;
 		bias-pull-up;
+		/* Without input-enable the pins keep the direction the bootloader
+		 * left behind (output low = touch held in reset). */
+		input-enable;
 	};
 
 	ts_int_suspend_state: ts-int-suspend-state {
@@ -669,27 +695,20 @@
 };
 
 &ufshc {
+	status = "okay";
 	vcc-supply = <&vreg_l20a_2p95>;
 	vccq-supply = <&vreg_l26a_1p2>;
 	vccq2-supply = <&vreg_s4a_1p8>;
+	vdd-hba-supply = <&vreg_l26a_1p2>;
 	vcc-max-microamp = <750000>;
 	vccq-max-microamp = <560000>;
 	vccq2-max-microamp = <750000>;
-	/*
-	 * The downstream sagit 4.19 DT configures the host link as one lane
-	 * per direction while the QMP PHY still has two lanes.  Keep the
-	 * board-specific link width instead of the msm8998.dtsi default of 2.
-	 */
-	lanes-per-direction = <1>;
-	/* Upstream UFS host driver + generic QMP UFS PHY. */
-	status = "okay";
 };
 
 &ufsphy {
+	status = "okay";
 	vdda-phy-supply = <&vreg_l1a_0p875>;
 	vdda-pll-supply = <&vreg_l2a_1p2>;
-	vddp-ref-clk-supply = <&vreg_l26a_1p2>;
-	status = "okay";
 };
 
 &usb3 {
@@ -719,32 +738,25 @@
 };
 
 /*
- * Firmware paths for the blobs staged from firmware-mainline-xiaomi-mi6.
- * Keep the remoteprocs disabled until the basic display/UFS boot has been
- * validated; enabling them before their dependencies are ready can stall
- * boot.  The MSS firmware-name order is MBA first, modem second.
+ * Display and GPU, ported from the msm8998-mainline community tree
+ * (gitlab.com/msm8998-mainline/linux: arch/arm64/boot/dts/qcom/
+ * msm8998-xiaomi-sagit.dts) and adapted to the node labels of this kernel.
  */
-&remoteproc_adsp {
-	firmware-name = "qcom/msm8998/xiaomi/adsp.mbn";
+
+&mmcc {
+	status = "okay";
+};
+
+&mmss_smmu {
+	status = "disabled";
 	status = "disabled";
 };
 
-&remoteproc_mss {
-	firmware-name = "qcom/msm8998/xiaomi/mba.mbn",
-			"qcom/msm8998/xiaomi/modem.mbn";
-	status = "disabled";
-};
-
-&remoteproc_slpi {
-	firmware-name = "qcom/msm8998/xiaomi/slpi_v2.mbn";
-	status = "disabled";
-};
-
-/*
- * Display: the Xiaomi Mi 6 uses the same JDI R63452 command-mode panel as
- * the Mi 5.  Mainline 6.6 already has a DRM panel driver for it.
- */
 &mdss {
+	status = "okay";
+};
+
+&mdss_mdp {
 	status = "okay";
 };
 
@@ -754,25 +766,22 @@
 	vdd-supply = <&vreg_l1a_0p875>;
 	vdda-supply = <&vreg_l2a_1p2>;
 
-	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&mdss_dsi_active_state &mdss_te_active_state>;
-	pinctrl-1 = <&mdss_dsi_suspend_state &mdss_te_suspend_state>;
 
-	panel@0 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&mdss_dsi_active_state &mdss_te_state>;
+	pinctrl-1 = <&mdss_dsi_suspend_state &mdss_te_state>;
+
+	panel: panel@0 {
 		compatible = "jdi,fhd-r63452";
 		reg = <0>;
-		reset-gpios = <&tlmm 94 GPIO_ACTIVE_LOW>;
-		backlight = <&pmi8998_wled>;
 
-		/*
-		 * The 4.19 vendor DT describes these as "wqhd-vddio", "lab"
-		 * and "ibb" panel supplies.  VDDIO is PM8998 L14 (1.8 V);
-		 * LAB/IBB provide VSP/VSN.  The panel driver must enable them
-		 * before releasing reset.
-		 */
-		wqhd-vddio-supply = <&vreg_l14a_1p8>;
-		lab-supply = <&lab>;
+		backlight = <&pmi8998_wled>;
+		reset-gpios = <&tlmm 94 GPIO_ACTIVE_LOW>;
+		disp-te-gpios = <&tlmm 10 GPIO_ACTIVE_LOW>;
+
 		ibb-supply = <&ibb>;
+		lab-supply = <&lab>;
+		vddio-supply = <&vreg_l14a_1p8>;
 
 		port {
 			panel_in: endpoint {
@@ -782,91 +791,123 @@
 	};
 };
 
+&mdss_dsi0_out {
+	remote-endpoint = <&panel_in>;
+	data-lanes = <0 1 2 3>;
+};
+
 &mdss_dsi0_phy {
 	status = "okay";
 	vdds-supply = <&vreg_l1a_0p875>;
 };
 
-&mdss_dsi0_out {
-	remote-endpoint = <&panel_in>;
-};
-
 &pmi8998_wled {
 	status = "okay";
 
-	/*
-	 * Only WLED_SINK1 and WLED_SINK2 are wired to the Mi 6 panel
-	 * connector.  SINK3/SINK4 are unconnected; enabling them makes the
-	 * WLED boost converter hit OVP and turn the backlight off.  The 4.19
-	 * vendor DTB expresses the same setting as qcom,string-cfg = <0x03>.
-	 */
-	qcom,enabled-strings = <0 1>;
+	default-brightness = <800>;
 	qcom,switching-freq = <800>;
 	qcom,ovp-millivolt = <29600>;
 	qcom,current-boost-limit = <970>;
+	/*
+	 * The JDI panel used on sagit only has two LED strings connected.
+	 * Enabling all four makes the boost converter drive open strings and
+	 * trip the over-voltage protection continuously (~18k IRQs/s).
+	 * Matches qcom,led-strings-list = [00 01] in the downstream DTS.
+	 */
 	qcom,current-limit-microamp = <20000>;
-};
-
-/*
- * LAB/IBB are VSP/VSN panel rails.  Keep them consumer-controlled so the
- * panel driver can sequence them with the DSI reset; the 4.19 vendor DT does
- * not mark them always-on.
- */
-&lab {
-	regulator-min-microvolt = <4600000>;
-	regulator-max-microvolt = <6000000>;
+	/* Only one of num-strings / enabled-strings may be given. */
+	qcom,enabled-strings = <0 1>;
 };
 
 &ibb {
 	regulator-min-microvolt = <4600000>;
 	regulator-max-microvolt = <6000000>;
+	regulator-min-microamp = <800000>;
+	regulator-max-microamp = <800000>;
+	regulator-enable-ramp-delay = <200>;
+	regulator-over-current-protection;
+	regulator-pull-down;
+	regulator-ramp-delay = <1>;
+	regulator-settling-time-up-us = <600>;
+	regulator-settling-time-down-us = <1000>;
+	regulator-soft-start;
+	qcom,discharge-resistor-kohms = <300>;
+	regulator-always-on;
+};
+
+&lab {
+	regulator-min-microvolt = <4600000>;
+	regulator-max-microvolt = <6000000>;
+	qcom,soft-start-us = <800>;
+	regulator-min-microamp = <200000>;
+	regulator-max-microamp = <200000>;
+	regulator-enable-ramp-delay = <500>;
+	regulator-over-current-protection;
+	regulator-pull-down;
+	regulator-ramp-delay = <1>;
+	regulator-settling-time-up-us = <50000>;
+	regulator-settling-time-down-us = <3000>;
+	regulator-soft-start;
+	regulator-always-on;
+};
+
+&pmi8998_charger {
+	status = "okay";
+	monitored-battery = <&battery>;
 };
 
 /*
- * The Mi 6 debug UART is BLSP2 UART1 on GPIO4/5 (the same pins and function
- * used by the 4.19 vendor DT).  Keep the alias at serial0 so the kernel
- * console is ttyMSM0 regardless of probe order with the Bluetooth UART.
+ * Adreno 540 GPU.
+ *
+ * The zap shader is provided by firmware-xiaomi-sagit as
+ * qcom/msm8998/xiaomi/a540_zap.mbn and has to be present in the
+ * initramfs, because msm.ko is loaded from there.
+ *
+ * We are lacking support for the GPU regulator. Hence, disable higher
+ * frequencies for now to prevent the platform from hanging on high
+ * graphics loads.
  */
-&tlmm {
-	blsp2_uart1_debug: blsp2-uart1-debug {
-		mux {
-			pins = "gpio4", "gpio5";
-			function = "blsp_uart8_a";
-		};
-
-		config {
-			pins = "gpio4", "gpio5";
-			drive-strength = <2>;
-			bias-disable;
-		};
-	};
+&gpucc {
+	status = "okay";
 };
 
-/ {
-	aliases {
-		serial0 = &blsp2_uart1;
-	};
-
-	chosen {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-
-		framebuffer0: framebuffer@9d400000 {
-			compatible = "simple-framebuffer";
-			reg = <0x0 0x9d400000 0x0 0x2400000>;
-			width = <1080>;
-			height = <1920>;
-			stride = <(1080 * 4)>;
-			format = "a8r8g8b8";
-		};
-	};
+&gpu_mem {
+	compatible = "shared-dma-pool";
 };
 
 &adreno_gpu {
-	status = "disabled";
+	status = "okay";
+
+	zap-shader {
+		memory-region = <&zap_shader_region>;
+		firmware-name = "qcom/msm8998/xiaomi/a540_zap.mbn";
+	};
+
+	opp-table {
+		/*
+		 * VDD_GFX is pm8005_s1, which is kept always-on at 988 mV, so
+		 * the Adreno 540 can run at its nominal corners.  Only the two
+		 * highest corners (670/710 MHz) stay disabled: they want the
+		 * GPU CPR, which mainline does not have.
+		 */
+		/delete-node/ opp-710000097;
+		/delete-node/ opp-670000048;
+	};
 };
 
 &adreno_smmu {
 	status = "disabled";
+	status = "disabled";
 };
+
+/*
+ * HACK: Shoot GPU voltage high to stabilize Adreno 540 at high
+ * frequencies until the GPU CPR is brought up.
+ */
+&pm8005_s1 {
+	regulator-min-microvolt = <988000>;
+};
+
+/* &apc_cprh {
+	status = "okay";
+}; */
