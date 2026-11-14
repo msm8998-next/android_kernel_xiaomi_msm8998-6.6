@@ -192,8 +192,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 	};
-
-    ufs_ref_clk: ufs-ref-clk {
+ufs_ref_clk: ufs-ref-clk {
         compatible = "fixed-clock";
         clock-frequency = <19200000>; /* 19.2 МГц */
         #clock-cells = <0>;
@@ -767,13 +766,26 @@
  * msm8998-xiaomi-sagit.dts) and adapted to the node labels of this kernel.
  */
 
+&gcc {
+	clocks = <&xo>, <&sleep_clk>;
+};
+
 &mmcc {
 	status = "okay";
+	clocks = <&xo>,
+		 <&gcc GCC_MMSS_GPLL0_CLK>,
+		 <&mdss_dsi0_phy 1>,
+		 <&mdss_dsi0_phy 0>,
+		 <&mdss_dsi1_phy 1>,
+		 <&mdss_dsi1_phy 0>,
+		 <0>,
+		 <0>,
+		 <0>,
+		 <&gcc GCC_MMSS_GPLL0_DIV_CLK>;
 };
 
 &mmss_smmu {
-	status = "disabled";
-	status = "disabled";
+	status = "okay";
 };
 
 &mdss {
@@ -823,7 +835,11 @@
 &mdss_dsi0_phy {
 	status = "okay";
 	vdds-supply = <&vreg_l1a_0p875>;
+	clocks = <&mmcc MDSS_AHB_CLK>,
+		 <&xo>;
 };
+
+
 
 &pmi8998_wled {
 	status = "okay";
@@ -893,6 +909,8 @@
  */
 &gpucc {
 	status = "okay";
+	clocks = <&xo>,
+		 <&gcc GCC_GPU_GPLL0_CLK>;
 };
 
 &gpu_mem {
@@ -920,8 +938,7 @@
 };
 
 &adreno_smmu {
-	status = "disabled";
-	status = "disabled";
+	status = "okay";
 };
 
 /*
