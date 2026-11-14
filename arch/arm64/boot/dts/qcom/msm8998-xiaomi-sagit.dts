@@ -193,6 +193,13 @@
 		regulator-boot-on;
 	};
 
+    ufs_ref_clk: ufs-ref-clk {
+        compatible = "fixed-clock";
+        clock-frequency = <19200000>; /* 19.2 МГц */
+        #clock-cells = <0>;
+    };
+
+
 	disp_vddts_vreg: disp-vddts-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "disp-vddts-regulator";
@@ -695,6 +702,23 @@
 };
 
 &ufshc {
+    clocks = <&gcc GCC_UFS_AXI_CLK>,
+             <&gcc GCC_AGGRE1_UFS_AXI_CLK>,
+             <&gcc GCC_UFS_AHB_CLK>,
+             <&gcc GCC_UFS_UNIPRO_CORE_CLK>,
+             <&ufs_ref_clk>,
+             <&gcc GCC_UFS_TX_SYMBOL_0_CLK>,
+             <&gcc GCC_UFS_RX_SYMBOL_0_CLK>,
+             <&gcc GCC_UFS_RX_SYMBOL_1_CLK>;
+    clock-names = "core_clk",
+                  "bus_aggr_clk",
+                  "iface_clk",
+                  "core_clk_unipro",
+                  "ref_clk",
+                  "tx_lane0_sync_clk",
+                  "rx_lane0_sync_clk",
+                  "rx_lane1_sync_clk";
+
 	status = "okay";
 	vcc-supply = <&vreg_l20a_2p95>;
 	vccq-supply = <&vreg_l26a_1p2>;
