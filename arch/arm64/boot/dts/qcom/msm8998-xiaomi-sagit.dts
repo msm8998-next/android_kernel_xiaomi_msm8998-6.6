@@ -340,6 +340,20 @@ ufs_ref_clk: ufs-ref-clk {
 };
 
 &rpm_requests {
+	/*
+	 * The RPM clock driver sends synchronous requests while
+	 * qcom_smd_rpm_probe() is populating its children.  On this
+	 * kernel the glink receive thread is only started from
+	 * announce_create(), i.e. after the rpmsg driver has probed,
+	 * so an ACK delivered through the normal receive queue would
+	 * not be processed until the 5 second RPM request timeout.
+	 *
+	 * Ask glink to run this channel's callback directly from the
+	 * IRQ handler instead.  The RPM callback only parses the ACK
+	 * and completes a completion, so it is IRQ-safe.
+	 */
+	qcom,cb-irq;
+
 	regulators-0 {
 		compatible = "qcom,rpm-pm8998-regulators";
 
