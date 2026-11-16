@@ -78,7 +78,13 @@ struct fpsimd_context {
 	struct _aarch64_ctx head;
 	__u32 fpsr;
 	__u32 fpcr;
+#ifdef __aarch64__
 	__uint128_t vregs[32];
+#else
+	/* 32-bit userspace may include this arm64 UAPI header.  Keep the
+	 * structure layout identical without requiring __uint128_t. */
+	__u64 vregs[64];
+#endif
 };
 
 /*
