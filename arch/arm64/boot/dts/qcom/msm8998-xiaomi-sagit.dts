@@ -65,6 +65,20 @@
 		};
 	};
 
+	/*
+	 * The bootloader still describes the UFS host as "soc/1da4000.ufshc",
+	 * but with the upstream 6.6 device tree the platform device is
+	 * "soc@0/1da4000.ufshc".  Android's first-stage init only creates
+	 * /dev/block/by-name for devices listed in boot_devices, so make sure
+	 * the 6.6 path wins over the bootloader-provided value.
+	 */
+	firmware {
+		android {
+			compatible = "android,firmware";
+			boot_devices = "soc@0/1da4000.ufshc";
+		};
+	};
+
 	reserved-memory {
 		/*
 		 * Xiaomi's ADSP firmware requires 30 MiB in total, so increase the adsp_mem
