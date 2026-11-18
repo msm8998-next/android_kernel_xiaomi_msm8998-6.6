@@ -373,6 +373,29 @@ static int psci_idle_init_cpu(struct device *dev, int cpu)
 	if (ret <= 0)
 		return ret ? : -ENODEV;
 
+	if (of_machine_is_compatible("qcom,msm8998")) {
+		int i;
+
+		/*
+		 * msm8998: this firmware has no broadcast timer that can wake a
+		 * CPU whose architected timer stopped, yet the DT advertises
+		 * retention and power-collapse states that do exactly that.  A
+		 * CPU entering one of them loses the tick and sleeps until an
+		 * unrelated interrupt happens to arrive; during boot that
+		 * starves rcu_preempt for tens of seconds ("timer wakeup
+		 * didn't happen for %lu jiffies") and delays init.
+		 *
+		 * Keep only architectural WFI until the LPM/SPM path is
+		 * implemented, which is what the vendor kernel uses to make
+		 * these states actually wake up.
+		 */
+		for (i = 1; i < ret; i++)
+			drv->states[i].flags |= CPUIDLE_FLAG_UNUSABLE;
+
+		pr_warn("msm8998: WFI only, disabling %d PSCI idle states\n",
+			ret - 1);
+	}
+
 	/*
 	 * Initialize PSCI idle states.
 	 */
