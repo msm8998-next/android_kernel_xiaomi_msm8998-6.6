@@ -729,6 +729,9 @@ static int qcom_smmu_def_domain_type(struct device *dev)
 	const struct of_device_id *match =
 		of_match_device(qcom_smmu_client_of_match, dev);
 
+	dev_err(dev, "qcom-smmu: def_domain_type -> %s\n",
+		match ? "identity" : "auto");
+
 	return match ? IOMMU_DOMAIN_IDENTITY : 0;
 }
 

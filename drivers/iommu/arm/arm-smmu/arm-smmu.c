@@ -2168,6 +2168,9 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	}
 
 	/* Looks ok, so add the device to the domain */
+	dev_err(dev, "arm-smmu: attaching domain type %u stage %u sid %u\n",
+		domain->type, smmu_domain->stage,
+		fwspec->num_ids ? fwspec->ids[0] : 0);
 	ret = arm_smmu_domain_add_master(smmu_domain, cfg, fwspec);
 	if (!ret)
 		if (iommu_logger_register(domain, dev, smmu_domain->pgtbl_ops))

@@ -373,29 +373,6 @@ static int psci_idle_init_cpu(struct device *dev, int cpu)
 	if (ret <= 0)
 		return ret ? : -ENODEV;
 
-	if (of_machine_is_compatible("qcom,msm8998")) {
-		int i;
-
-		/*
-		 * msm8998: this firmware has no broadcast timer that can wake a
-		 * CPU whose architected timer stopped, yet the DT advertises
-		 * retention and power-collapse states that do exactly that.  A
-		 * CPU entering one of them loses the tick and sleeps until an
-		 * unrelated interrupt happens to arrive; during boot that
-		 * starves rcu_preempt for tens of seconds ("timer wakeup
-		 * didn't happen for %lu jiffies") and delays init.
-		 *
-		 * Keep only architectural WFI until the LPM/SPM path is
-		 * implemented, which is what the vendor kernel uses to make
-		 * these states actually wake up.
-		 */
-		for (i = 1; i < ret; i++)
-			drv->states[i].flags |= CPUIDLE_FLAG_UNUSABLE;
-
-		pr_warn("msm8998: WFI only, disabling %d PSCI idle states\n",
-			ret - 1);
-	}
-
 	/*
 	 * Initialize PSCI idle states.
 	 */
@@ -429,6 +406,26 @@ static int psci_cpuidle_probe(struct platform_device *pdev)
 	int cpu, ret;
 	struct cpuidle_driver *drv;
 	struct cpuidle_device *dev;
+
+	/*
+	 * msm8998: every PSCI idle state here stops the architected timer and
+	 * the firmware has no broadcast timer to wake the CPU again.  Even the
+	 * driver's own "WFI" entry, which is PSCI CPU_SUSPEND(0), loses the
+	 * tick: with all DT states marked unusable the boot still starves
+	 * rcu_preempt from ~0.9 s until ~73 s ("timer wakeup didn't happen").
+	 * SET_SUSPEND_MODE is denied so the firmware cannot be switched to
+	 * platform-coordinated mode either.
+	 *
+	 * Do not register cpuidle at all, so do_idle() falls back to
+	 * default_idle_call() and arch_cpu_idle() executes a plain WFI, which
+	 * cannot lose the timer.  The vendor kernel instead drives the
+	 * SPM/LPM hardware directly, and this can be revisited once that is
+	 * implemented.
+	 */
+	if (of_machine_is_compatible("qcom,msm8998")) {
+		pr_err("msm8998: PSCI idle unusable, keeping plain WFI\n");
+		return -ENODEV;
+	}
 
 	for_each_possible_cpu(cpu) {
 		ret = psci_idle_init_cpu(&pdev->dev, cpu);
