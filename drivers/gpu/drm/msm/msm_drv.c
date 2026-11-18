@@ -1275,6 +1275,22 @@ int msm_drv_probe(struct device *master_dev,
 
 static int msm_pdev_probe(struct platform_device *pdev)
 {
+	/*
+	 * sagit bring-up: the bootloader hands over with the panel still
+	 * scanning the splash framebuffer out through display SID 0.
+	 * msm_drv_probe() attaches a translating unmanaged domain to
+	 * display-subsystem before the DPU reprograms the panel, so the
+	 * running scanout misses in the fresh page table and the machine
+	 * stops dead at ~0.96 s.  Keep the display master off until the
+	 * handover is handled (map the splash into the display domain, or
+	 * attach it only after the panel is retaken).
+	 */
+	if (of_machine_is_compatible("qcom,msm8998")) {
+		dev_err(&pdev->dev,
+			"sagit: display master disabled for bring-up\n");
+		return -ENODEV;
+	}
+
 	return msm_drv_probe(&pdev->dev, NULL);
 }
 
