@@ -556,6 +556,15 @@ static const struct of_device_id qcom_smmu_client_of_match[] __maybe_unused = {
 	{ .compatible = "qcom,adreno-gmu" },
 	{ .compatible = "qcom,mdp4" },
 	{ .compatible = "qcom,mdss" },
+	/*
+	 * sagit: the bootloader hands over with the panel still scanning out
+	 * its splash framebuffer through SID 0.  If display-subsystem gets a
+	 * translated default domain, that scanout hits an empty page table at
+	 * ~0.9 s and the downstream fault model panics in the fault IRQ
+	 * thread.  Keep the default domain bypassed until the DPU driver
+	 * attaches its own domain, like the other mdss clients above.
+	 */
+	{ .compatible = "qcom,msm8998-mdss" },
 	{ .compatible = "qcom,sc7180-mdss" },
 	{ .compatible = "qcom,sc7180-mss-pil" },
 	{ .compatible = "qcom,sc7280-mdss" },
