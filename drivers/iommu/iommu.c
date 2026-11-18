@@ -2971,6 +2971,9 @@ static int iommu_setup_default_domain(struct iommu_group *group,
 	if (req_type < 0)
 		return -EINVAL;
 
+	pr_err("iommu: group %s: req_type %d, global default %d\n",
+	       group->name, req_type, iommu_def_domain_type);
+
 	/*
 	 * There are still some drivers which don't support default domains, so
 	 * we ignore the failure and leave group->default_domain NULL.

@@ -2707,6 +2707,8 @@ static int arm_smmu_def_domain_type(struct device *dev)
 	struct arm_smmu_master_cfg *cfg = dev_iommu_priv_get(dev);
 	const struct arm_smmu_impl *impl;
 
+	dev_err(dev, "arm-smmu: def_domain_type called, cfg=%px\n", cfg);
+
 	if (!cfg)
 		return 0;
 
