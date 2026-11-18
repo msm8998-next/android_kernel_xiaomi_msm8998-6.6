@@ -24,6 +24,7 @@
 #include <linux/pci-ats.h>
 #include <linux/bitops.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
 #include <linux/property.h>
 #include <linux/fsl/mc.h>
 #include <linux/module.h>
@@ -1832,6 +1833,22 @@ static int iommu_get_default_domain_type(struct iommu_group *group,
 
 	for_each_group_device(group, gdev) {
 		unsigned int type = iommu_get_def_domain_type(gdev->dev);
+
+		/*
+		 * sagit: display-subsystem must stay on a bypass default
+		 * domain.  The bootloader hands over with the panel scanning
+		 * the splash out through SID 0; a translated (DMA) default
+		 * domain makes that scanout miss in an empty page table and
+		 * the arm-smmu fault handler takes the kernel down.  The
+		 * display driver attaches its own identity domain at probe
+		 * time anyway, so nothing is lost by starting bypassed.
+		 *
+		 * The qcom glue hint (def_domain_type) does not reach this
+		 * point for this device, so pin it here.
+		 */
+		if (of_device_is_compatible(gdev->dev->of_node,
+					    "qcom,msm8998-mdss"))
+			type = IOMMU_DOMAIN_IDENTITY;
 
 		if (best_type && type && best_type != type) {
 			if (target_type) {
